@@ -1,5 +1,6 @@
 var Haibu = require('./lib/haibu')
   , server = require('./plugins/server')
+  , mini = require('./plugins/mini-balancer')
   , logger = require('./plugins/logger')
   , carapace = require('./plugins/carapace')
   , ProtoList = require('proto-list')
@@ -32,6 +33,7 @@ haibu.tools = tools
 //finally, these plugins do not form a chain, but they may control haibu.
 
 server(haibu, config)
+mini(haibu, config) //mini balancer
 
 //also make a balancer plugin?
 //could also do logging this way.
