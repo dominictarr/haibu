@@ -20,6 +20,7 @@ this has been a one weekend effort, so there are some things left undone (they s
   * balancer 
   * test server
   * implement clean command
+  * simple way to cancel commands
   
 pull repos arn't used anymore, however, they would be simple to add back in.
 
