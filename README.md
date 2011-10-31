@@ -1,3 +1,28 @@
+
+## NOTES on v1
+
+hey, I've completely refactored this, 
+
+  * remove global state
+  * change the Drone -> a Haibu class. (manages the state of the drones)
+  * create a Drone class. (represents the state of an app process)
+  * drone-tools: actually implement the messy work that installs, and starts the apps.
+  (these are overridable via a prototype chain based plugin system)
+  * server, and logging are implemented as plugins
+  * added a test tool -- deploy and run the tests of an app.
+
+`Haibu` is now way more modular, and is very easy to drive programatically.
+infact, `Haibu` is now almost _entirely_ plugin.  
+
+this has been a one weekend effort, so there are some things left undone (they should be implemented as plugins)
+
+  * autostart
+  * balancer 
+  * test server
+  * implement clean command
+  
+pull repos arn't used anymore, however, they would be simple to add back in.
+
 # haibu
 
 <img src="https://github.com/nodejitsu/haibu/raw/master/examples/haibu.png"/></img>
