@@ -1,0 +1,18 @@
+{
+  "name": "slow-install",
+  "description": "test app that takes a long time to npm install",
+  "version": "0.1.0",
+  "author": "Dominic",
+  "repository": {
+    "type": "git",
+    "url": "http://github.com/Marak/hellonode.git"
+  },
+  "dependencies": {
+    "express": "*",
+    "expresso": "0"
+  },
+  "scripts": {
+    "start": "server.js"
+  },
+  "engine": [ "node >=0.1.90" ]
+}

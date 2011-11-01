@@ -1,0 +1,8 @@
+{
+  "name": "spinner",
+  "scripts": {
+    "start": "server.js"
+  },
+  "main" : "./server.js",
+  "version": "0.0.0"
+}
