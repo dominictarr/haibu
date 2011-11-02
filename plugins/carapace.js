@@ -6,6 +6,7 @@ var hookio = require('hook.io'),
 
 
 // implementation of start tool, that uses carapace and hook.io to detect the port.
+// needs a shutdown command.
 
 module.exports = function (config, callback) {
   var hook = new hookio.Hook(config);
@@ -18,6 +19,7 @@ module.exports = function (config, callback) {
   return {
     start: function (drone, config, callback) {
       var options
+        , aborted
       if(config['hook-port']) {
         options = ['--hook-port', config['hook-port']]
       }
@@ -41,7 +43,7 @@ module.exports = function (config, callback) {
       }
 
       var monitor = new forever.Monitor(drone.startScript, foreverOptions);
-
+      drone.monitor = monitor
       monitor.on('error', function () {
         //
         // 'error' event needs to be caught, otherwise
@@ -60,7 +62,7 @@ module.exports = function (config, callback) {
       function onError (err) {
         if (!responded) {
           responded = true;
-          callback(err);
+          callback(err, drone);
 
           //
           // Remove listeners to related events.
@@ -115,15 +117,15 @@ module.exports = function (config, callback) {
       function onExit () {
         if (!responded) {
           responded = true;
-          error = new Error('Error spawning drone');
-          error.stderr = stderr.join('\n')
-          callback(error);
-
+          var error = new Error('Error spawning drone');
+          monitor.stop()
           //
           // Remove listeners to related events.
           //
+          console.error('EXIT')
           monitor.removeListener('error', onError);
           hook.removeListener('*::carapace::port', onCarapacePort);
+          callback(error, drone);
         }
       }
 
@@ -133,6 +135,15 @@ module.exports = function (config, callback) {
       attachEvents(monitor, drone)
       hook.once('*::carapace::port', onCarapacePort);
       monitor.start();
+      monitor.child.on('exit', onExit)
+      return function abort() {
+        if(!responded) {
+          aborted = new Error('start was aborted')
+          console.error('ABORT ABORT ABORT')
+          monitor.stop()
+        } 
+      }
     }
+  
   }
 }

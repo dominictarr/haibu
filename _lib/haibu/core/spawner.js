@@ -132,8 +132,6 @@ Spawner.prototype.spawn = function spawn (repo, callback) {
     foreverOptions.max = self.maxRestart;
   }
 
-
-
   //
   // Before we attempt to spawn, let's check if the startPath actually points to a file
   // Trapping this specific error is useful as the error indicates an incorrect

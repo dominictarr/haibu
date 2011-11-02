@@ -1,157 +1,91 @@
+
+var a = require('assertions')
+  , ninja = require('ninja-tools') 
+  , path = require('path')
+  , tmp = process.env.TMP || '/tmp'
+  , Drone = require('../lib/drone')
+  , dTools = require('../lib/drone-tools')
+  , ctrl = require('ctrlflow')
+  
+var __projectdir = path.join(__dirname, '..')
+
+exports.makeTmpPath = function () {return path.join(tmp, 'haibu-test_' + Date.now())}
+
+exports.assertHasStartScript = a._path(['package', 'scripts', 'start'], a._equal('server.js'), 'Drone must hake start script.')
+
+exports.setupDrone =  function (name, test){ 
+  var tmpPath = exports.makeTmpPath()
+  var drone = new Drone(tmpPath, {})
+  ctrl([
+    [ninja.cp_r, path.join(__projectdir, 'fixtures', name), tmpPath],
+    [dTools.init, drone]
+  ])(function (err) {
+    test(err, drone)
+  })
+}
+
+exports.addTests = function (exports, toolSet, tests, description) {
+  tests.forEach (function (pluginTest) {
+    if(toolSet.hasOwnProperty(pluginTest.action))
+    exports[JSON.stringify(pluginTest.action) + ' in ' + JSON.stringify(description) +': ' +pluginTest.name] = function (test) {
+      pluginTest.test(toolSet, test)
+    }
+  })
+}
+
+
+// each tool command should return a cancel function.
+// if you call the cancel function, it should stop what ever it was doing,
+// rolling back if necessary/possible
+// and not callback.
+
+// the most important things to be able to cancel are the things that take the longest.
+// create, install, start, and test.
+
 /*
- * helpers.js: Test helpers for haibu
- *
- * (C) 2011 Nodejitsu Inc.
- * MIT LICENSE
- *
- */
-
-var assert = require('assert'),
-    exec = require('child_process').exec,
-    fs = require('fs'),
-    path = require('path'),
-    util = require('util'),
-    request = require('request'),
-    haibu = require('../lib/haibu');
-
-var helpers = exports,
-    testConfig;
-
-function showConfigWarning (requireAuth) {
-  if ((!testConfig || !testConfig.auth || 
-      testConfig.auth.username === 'test-username' ||
-      testConfig.auth.apiKey === 'test-apiKey') 
-      && requireAuth) {
-    console.warn("Config file test/fixtures/test-config.json doesn't have valid data. Skipping remote tests");
+  function whatever (args..., callback) {
+    //start doing whatever.
+    return cancel () {
+      //stop doing whatever.
+    }  
   }
-}
+*/
 
-helpers.loadConfig = function (requireAuth) {
-  function showConfig () {
-    showConfigWarning(requireAuth);
-    return testConfig;
-  }
+
+//
+// assert that an async function keeps the Cancellable contract.
+//
+// a Cancellable function must take a callback, and return a cancel function.
+// if the cancel function is called, it must stop what it is doing, and callback with an error.
+// ( kill child processes, destroy streams, rollback changes, etc )
+
+exports.isCancelable = function (func, name) {
+
+  return function () {
+    var args = [].slice.call(arguments)
+      , callback = args.pop()
+      , called = false
+      , cancelled = false
+      ;
   
-  if (testConfig) {
-    return showConfig();
-  }
+    a.isFunction(callback, 'the cancelable function "'+name+'" must be passed a callback')
+    
+    var _callback = function (err) {
+        a.equal(called, false, 'callback should only be called once in "'+name+'"')
+        called = true
+        if(cancelled)
+          a.ok(err, 'cancelled function "'+name+'" must callback with an error')
+        return callback.apply(this, arguments)
+    }
+
+    args.push(_callback)
+    var cancel = func.apply(this, args)
+    a.isFunction(cancel, 'cancelable function "'+name+'" must return a cancel function')
+    return function () {
+        cancelled = true;
+        cancel()
+      }
   
-  try {
-    var configFile = path.join(__dirname, 'fixtures', 'test-config.json'),
-        config = JSON.parse(fs.readFileSync(configFile).toString());
-
-    testConfig = config;
-    return showConfig();
-  }
-  catch (ex) {
-    return showConfig();
-  }
-};
-
-helpers.cleanAutostart = function (callback) {
-  exec('rm -rf ' + path.join(haibu.config.get('directories:autostart'), '*'), callback);
-};
-
-helpers.init = function (callback) {
-  var config = helpers.loadConfig() || {};
-  helpers.cleanAutostart(function () {
-    haibu.init({ env: 'development' }, function (err) {
-      haibu.use(haibu.plugins.logger, {
-        loggly: config.loggly || haibu.config.get('loggly'),
-        console: {
-          level: 'silly',
-          silent: true
-        }
-      });
-
-      return callback(err);
-    });
-  });
-};
-
-helpers.start = function (port, callback) {
-  helpers.init(function (err) {
-    haibu.drone.start({
-      minUptime: 0,
-      port: port,
-      maxRestart: 2,
-      init: false
-    }, function (err, server) {
-      return callback(err, server);
-    });
-  });
-};
-
-helpers.startHook = function (callback) {
-  helpers.init(function (err) {
-    haibu.drone.startHook(callback);
-  });
-}
-
-helpers.requireInit = function (initialized) {
-  return {
-    "This test requires haibu.init": {
-      topic: function () {
-        helpers.init(this.callback);
-      },
-      "should respond with no error": function (err) {
-        assert.isTrue(!err);
-        if (initialized) {
-          initialized();
-        }
-      }
-    }
-  };
-};
-
-helpers.requireHook = function (initialized) {
-  return {
-    "This test requires haibu.running.hook": {
-      topic: function () {
-        helpers.startHook(this.callback);
-      },
-      "should respond with no error": function (err, hook) {
-        assert.isTrue(!err);
-        if (initialized) {
-          initialized();
-        }
-      }
-    }
   }
 }
 
-helpers.requireStart = function (port, started) {
-  return {
-    "This test requires haibu.drone.start": {
-      topic: function () {
-        helpers.start(port, this.callback);
-      },
-      "should respond with no error": function (err, server) {
-        assert.isTrue(!err);
-        if (started) {
-          started(server);
-        }
-      }
-    }
-  };
-};
-
-helpers.assertApp = function (message, assertFn) {
-  var context = {
-    topic: function (res, body) {
-      var result = JSON.parse(body);
-      request({ 
-        uri: 'http://' + result.drone.host + ':' + result.drone.port
-      }, this.callback);
-    }
-  };
-  
-  context[message] = assertFn;
-  return context
-}
-
-helpers.assertTestApp = function () {
-  return helpers.assertApp("should respond with 'hello, i know nodejitsu.'", function (err, res, body) {
-    assert.equal(body, 'hello, i know nodejitsu.');
-  });
-};
