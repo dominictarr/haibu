@@ -1,5 +1,7 @@
 var http = require('http')
-
+  , url = require('url')
+  , qs = require('querystring')
+  ;
 function send(res, status, obj) {
   res.writeHeader(status, {'content-type': 'application/json'})
     res.end(JSON.stringify(obj)+ '\n')
@@ -39,7 +41,7 @@ module.exports = function (haibu, config) {
   function deploy(req, res) {
     res.writeHead(200, {'content-type': 'application/json'})
     //add event listeners, then on a given end event, remove them all.
-    var drone = haibu.deploy(req, {})
+    var drone = haibu.deploy(req, {env: req.query})
 
     var eRes = eventResponse(drone, res)
     ;['stderr', 'stdout', 'start', 'restart', 'package', 'exit', 'install', 'port'].forEach(eRes.add)
@@ -79,6 +81,9 @@ module.exports = function (haibu, config) {
         return true
       }
     }
+
+    var query = qs.parse(url.parse(req.url).query)
+    req.query = query
 
     var method = req.method
       var handler = 
