@@ -1,6 +1,15 @@
 
 ## NOTES on v1
 
+###Must-haves
+
+  * run apps as unprivliged user. (configurable, set permissions, only write to /tmp and where the app is installed
+  * completely kill long running test processes.
+  * https
+  * auth
+
+### explain
+
 hey, I've completely refactored this, 
 
   * remove global state

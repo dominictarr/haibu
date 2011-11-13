@@ -1,7 +1,9 @@
 var http = require('http')
   , url = require('url')
   , qs = require('querystring')
+  , connect = require('connect')
   ;
+
 function send(res, status, obj) {
   res.writeHeader(status, {'content-type': 'application/json'})
     res.end(JSON.stringify(obj)+ '\n')
@@ -31,6 +33,7 @@ function eventResponse(emitter, res) {
       events.push(add(event, 'function' == typeof listener ? listener : writeEvent))
       return this
     },
+    emit: writeEvent,
     removeAll: function () {
       removeAll(events)   
     }
@@ -38,22 +41,31 @@ function eventResponse(emitter, res) {
 }
 module.exports = function (haibu, config) {
 
-  function deploy(req, res) {
+  function deploy(req, res, next) {
     res.writeHead(200, {'content-type': 'application/json'})
     //add event listeners, then on a given end event, remove them all.
-    var drone = haibu.deploy(req, {env: req.query})
+    var meta = req.params
+    meta.env = req.query
+
+    var drone = haibu.deploy(req, meta)
+
+    console.error(req.query)
 
     var eRes = eventResponse(drone, res)
     ;['stderr', 'stdout', 'start', 'restart', 'package', 'exit', 'install', 'port'].forEach(eRes.add)
 
     drone.once('port', function (port) {
+      eRes.emit('info', drone.info())
       eRes.removeAll()
       res.end()
     })
   }
 
-  function test(req, res) {
-    var drone = haibu.test(req, {})
+  function test(req, res, next) {
+    var meta = req.params
+    meta.env = req.query
+
+    var drone = haibu.test(req, meta)
     //add event listeners, then on a given end event, remove them all.
     var eRes = eventResponse(drone, res)
     ;['stderr', 'stdout', 'start', 'restart', 'package', 'exit', 'install','install-error', 'result'].forEach(eRes.add)
@@ -63,44 +75,51 @@ module.exports = function (haibu, config) {
     })
   }
 
-  function info(req, res) {
+  function stop (req, res, next) {
+    var drone = haibu.get(req.args.shift())
+    var eRes = eventResponse(drone, res)
+    ;['stderr', 'stdout', 'exit', 'stop'].forEach(eRes.add)
+    drone.once('exit', function () {
+      eRes.removeAll()
+      res.end()
+    })
+    haibu.stop(drone.id)
+
+  }
+
+  function info(req, res, next) {
     //add event listeners, then on a given end event, remove them all.
       var infos = haibu.all().map(function (drone) { return drone.info() })
       send(res, 200, infos)
   }
   
-  function _404 (req, res) {
-    send(res, 404, {url: req.url, method: req.method, message: 'don\'t know that one'})
+  function error (err, req, res, next) {
+    var status = 'number' == typeof err ? status : 500
+    send(res, 404, {url: req.url, method: req.method, message: (err && err.message) || 'don\'t know that one'})
   }
 
-  var handler = function (req, res) {
-    function match(rx) {
-      var m = rx.exec(req.url)
-      if(m) {
-        req.args = m.slice(1)
-        return true
-      }
-    }
+var handler = 
+  connect(
+    connect.query(),
+    connect.router(function (app) {
+      app.put('/deploy/-/:instance?'      , deploy)
+      app.put('/deploy/:group?/:instance?', deploy)
+      app.put('/test/-/:instance?'        , test)
+      app.put('/test/:group?/:instance?'  , test)
 
-    var query = qs.parse(url.parse(req.url).query)
-    req.query = query
+      app.post('/stop/-/:instance'        , stop)
+      app.post('/stop/:group'             , stop)
 
-    var method = req.method
-      var handler = 
-      ( method == 'POST' || method == 'PUT' ? (
-          match(/^\/drones\/([0-9a-zA-Z_\-]+)\/deploy/)   ? deploy
-        : match(/^\/drones\/([0-9a-zA-Z_\-]+)\/test/)     ? test
-//        : match(/^\/drones\/([0-9a-zA-Z_\-]+)\/stop/)     ? stop
-//        : match(/^\/drones\/([0-9a-zA-Z_\-]+)\/restart/)  ? restart
-        : null ) 
-      : method == 'GET' ? (
-          match(/^\/drones(\/[0-9a-zA-Z_\-]+)?\/?$/)         ? info
-        : null) 
-      : null 
-      ) || _404
-      console.error(handler)
-      handler(req, res)
-    }
+      app.post('/restart/-/:instance'     , stop)
+      app.post('/restart/:group'          , stop)
+
+      app.get('/-/:instance?'             , info)
+      app.get('/:group?'                  , info)
+    }),
+    error
+//    connect.errorHandler()
+  )
+
   var port = config.port || 9002
-  http.createServer(handler).listen(port, function () {console.error('Haibu listening on '+port)})
+  handler.listen(port, function () {console.error('Haibu listening on '+port)})
   }
